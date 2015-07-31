@@ -70,25 +70,25 @@ def days_between(d1, d2):
     d2 = datetime.strptime(d2, "%Y-%m-%d")
     return ((d2 - d1).days)
 
-def columnAdderAgg(data):
-    data = roundColumn(data)
-    data = daysAgedColumn(data)
+def columnAdderAgg(data, colNameDict):
+    data = roundColumn(data,colNameDict['iapRounded'])
+    data = daysAgedColumn(data,colNameDict['daysAged'])
     return data
 
-def roundColumn(data):
+def roundColumn(data, colName):
     def vModMapFunc(x):
         return roundUp100(x)/100
 
-    data['iapRounded'] = data['v'].map(vModMapFunc)
+    data[colName] = data['v'].map(vModMapFunc)
     return data
 
-def daysAgedColumn(data):
+def daysAgedColumn(data, colName):
     dateTupList = zip(data['install_date'], data['server_date'])
 
     def dateMapFunc(x):
         return days_between(x[0], x[-1])
 
-    data['daysAged'] = map(dateMapFunc, dateTupList)
+    data[colName] = map(dateMapFunc, dateTupList)
     return data
 
 spendRangeArr = [
@@ -115,6 +115,11 @@ spendRangeArr = [
     5000
 ]
 
+colNameDict = {
+    'iapRounded': 'iapRounded',
+    'daysAged': 'daysAged'
+}
+
 roundUp100 = roundup(100)
 
 iapData = pd.read_csv('dd2-iap-query.csv')
@@ -122,10 +127,41 @@ iapData = pd.read_csv('dd2-iap-query.csv')
 iapDataClean = dataProcess(iapData)
 
 spenderRangeDict = spendRangeDictBuilder(spendRangeArr)
-print spenderRangeDict
 
-print iapDataClean.iloc[0]['server_date']
-
-iapDataNewCols = columnAdderAgg(iapDataClean)
+iapDataNewCols = columnAdderAgg(iapDataClean, colNameDict)
 
 print iapDataNewCols
+
+# The following needs to be wrapped in a function.  Will add two columns:
+# Running sum total, and actual total.
+
+iapSumDict = collections.defaultdict(int)
+
+iapSumRunningList = []
+iapCountRunningList = []
+
+iapCountDict = collections.defaultdict(int)
+
+def sumRedFunc(accum, curr):
+    accum[curr[0]] += curr[1]
+
+    #side effects ftw! >__>
+    iapSumRunningList.append(accum[curr[0]])
+    iapCountDict[curr[0]] += 1
+    iapCountRunningList.append(iapCountDict[curr[0]])
+    return accum
+
+nameIAPTupList = zip(iapDataNewCols['s'],iapDataNewCols[colNameDict['iapRounded']])
+
+newSumDict = reduce(sumRedFunc,nameIAPTupList,iapSumDict)
+
+print iapSumRunningList
+print newSumDict
+print iapCountRunningList
+print iapCountDict
+
+
+print len(iapSumRunningList)
+print len(newSumDict)
+print len(iapCountRunningList)
+print len(iapCountDict)
