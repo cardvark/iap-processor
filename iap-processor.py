@@ -8,7 +8,7 @@ import numpy as np
 # sort by server time.
 def dataProcess(data):
     data = data[pd.notnull(data['s'])]
-    data.sort('server_time', inplace=True)
+    data.sort(server_time, inplace=True)
     return data
 
 # create a wrapper function to generate rounding functions.
@@ -135,11 +135,11 @@ def roundColumn(data, colName):
     def vModMapFunc(x):
         return roundUp100(x)/100
 
-    data[colName] = data['v'].map(vModMapFunc)
+    data[colName] = data[iapVal].map(vModMapFunc)
     return data
 
 def daysAgedColumn(data, colName):
-    dateTupList = zip(data['install_date'], data['server_date'])
+    dateTupList = zip(data[install_date], data[server_date])
 
     def dateMapFunc(x):
         return days_between(x[0], x[-1])
@@ -173,14 +173,24 @@ spendRangeArr = [
 
 # Master dict for naming the new columns.  Just change the value to change actual output.
 # No need to make major changes to the script.
+# DO NOT CHANGE THE KEYS, only the values.
 colNameDict = {
     'iapRounded': 'iapRounded',
     'daysAged': 'daysAged',
-    'iapSumRunningTotal': 'iapSum',
-    'iapSumTotal': 'iapTotal',
-    'iapCountRunningTotal': 'iapCt',
-    'iapCountTotal': 'iapCtTotal'
+    'iapSumRunningTotal': 'iapSumRun',
+    'iapSumTotal': 'iapSumTotal',
+    'iapCountRunningTotal': 'iapCtRun',
+    'iapCountTotal': 'iapCtTotal',
+    'spendGroupTotal': 'spendGroup',
+    'spendGroupDaysAged': 'sgGrAged'
+    'spendGroupCurrent': 'spGrCurrent'
 }
+
+### List of csv column headers - easily change based on the doc:
+server_time = 'server_time'
+install_date = 'install_date'
+server_date = 'server_date'
+iapVal = 'v'
 
 roundUp100 = roundup(100)
 
@@ -192,7 +202,12 @@ iapDataClean = dataProcess(iapData)
 
 spenderRangeDict = spendRangeDictBuilder(spendRangeArr)
 
-iapDataNewCols = columnAdderAgg(iapDataClean, colNameDict)
+iapDataNew = columnAdderAgg(iapDataClean, colNameDict)
 
-print iapDataNewCols
+print iapDataNew
 
+iapDataNew.to_csv('dd2-iap-modified.csv', index=False)
+
+# next items:
+# columns for spender groups.
+# filename output - user input as argv, else default to name + timestamp. (low priority)
