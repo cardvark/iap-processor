@@ -2,6 +2,7 @@ import collections
 import pandas as pd
 import math
 from datetime import datetime
+import numpy as np
 
 # Clean the data - remove blank s rows.
 # sort by server time.
@@ -73,6 +74,61 @@ def days_between(d1, d2):
 def columnAdderAgg(data, colNameDict):
     data = roundColumn(data,colNameDict['iapRounded'])
     data = daysAgedColumn(data,colNameDict['daysAged'])
+    data = sumAndCountCols(data, 
+                           data['s'],
+                           data['iapRounded'],
+                           colNameDict['iapSumRunningTotal'],
+                           colNameDict['iapSumTotal'],
+                           colNameDict['iapCountRunningTotal'],
+                           colNameDict['iapCountTotal'])
+
+    return data
+
+def sDictToArr(dict, sArr):
+    def sMapFunc(sID):
+        return dict[sID]
+
+    outputArr = map(sMapFunc, sArr)
+
+    return outputArr
+
+
+# This one is a bit sloppy.  Built on side effects (but at least all internal to the function)
+# And it changes 4 at a time.  But it seems more efficient than breaking them up just for the
+# sake of breaking them up.  Don't know.  Moving on, but may reconsider at some point.
+def sumAndCountCols(data, sCol, iapRoundedCol, sumRunName, sumTotName, ctRunName, ctTotName):
+
+    iapSumDict = collections.defaultdict(int)
+    iapSumRunList = []
+    iapCtDict = collections.defaultdict(int)
+    iapCtRunList = []
+
+    def sumRedFunc(accum, curr):
+        accum[curr[0]] += curr[1]
+
+        #side effects ftw! >__>
+        iapSumRunList.append(accum[curr[0]])
+        iapCtDict[curr[0]] += 1
+        iapCtRunList.append(iapCtDict[curr[0]])
+        return accum
+
+    nameIAPTupList = zip(sCol,iapRoundedCol)
+
+    iapSumDict = reduce(sumRedFunc,nameIAPTupList,iapSumDict)
+
+    iapSumTotalList = sDictToArr(iapSumDict, data['s'])
+    iapCtTotalList = sDictToArr(iapCtDict, data['s'])
+
+    iapSumRunArr = np.asarray(iapSumRunList)
+    iapSumTotArr = np.asarray(iapSumTotalList)
+    iapCtRunArr = np.asarray(iapCtRunList)
+    iapCtTotArr = np.asarray(iapCtTotalList)
+
+    data[sumRunName] = iapSumRunArr
+    data[sumTotName] = iapSumTotArr
+    data[ctRunName] = iapCtRunArr
+    data[ctTotName] = iapCtTotArr
+
     return data
 
 def roundColumn(data, colName):
@@ -115,15 +171,23 @@ spendRangeArr = [
     5000
 ]
 
+# Master dict for naming the new columns.  Just change the value to change actual output.
+# No need to make major changes to the script.
 colNameDict = {
     'iapRounded': 'iapRounded',
-    'daysAged': 'daysAged'
+    'daysAged': 'daysAged',
+    'iapSumRunningTotal': 'iapSum',
+    'iapSumTotal': 'iapTotal',
+    'iapCountRunningTotal': 'iapCt',
+    'iapCountTotal': 'iapCtTotal'
 }
 
 roundUp100 = roundup(100)
 
 iapData = pd.read_csv('dd2-iap-query.csv')
 
+# might just wrap this into the column aggregator.  Process the data, then add columns.
+# don't really need to run this separately.
 iapDataClean = dataProcess(iapData)
 
 spenderRangeDict = spendRangeDictBuilder(spendRangeArr)
@@ -132,36 +196,3 @@ iapDataNewCols = columnAdderAgg(iapDataClean, colNameDict)
 
 print iapDataNewCols
 
-# The following needs to be wrapped in a function.  Will add two columns:
-# Running sum total, and actual total.
-
-iapSumDict = collections.defaultdict(int)
-
-iapSumRunningList = []
-iapCountRunningList = []
-
-iapCountDict = collections.defaultdict(int)
-
-def sumRedFunc(accum, curr):
-    accum[curr[0]] += curr[1]
-
-    #side effects ftw! >__>
-    iapSumRunningList.append(accum[curr[0]])
-    iapCountDict[curr[0]] += 1
-    iapCountRunningList.append(iapCountDict[curr[0]])
-    return accum
-
-nameIAPTupList = zip(iapDataNewCols['s'],iapDataNewCols[colNameDict['iapRounded']])
-
-newSumDict = reduce(sumRedFunc,nameIAPTupList,iapSumDict)
-
-print iapSumRunningList
-print newSumDict
-print iapCountRunningList
-print iapCountDict
-
-
-print len(iapSumRunningList)
-print len(newSumDict)
-print len(iapCountRunningList)
-print len(iapCountDict)
