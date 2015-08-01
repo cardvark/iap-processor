@@ -7,7 +7,7 @@ import numpy as np
 # Clean the data - remove blank s rows.
 # sort by server time.
 def dataProcess(data):
-    data = data[pd.notnull(data['s'])]
+    data = data[pd.notnull(data[sID])]
     data.sort(server_time, inplace=True)
     return data
 
@@ -34,7 +34,7 @@ def spendRangeDictBuilder(spendArr):
         if idx == len(spendArr) - 1:
             dictOutput[num] = str(num) + "+"
         elif idx != 0:
-            dictOutput[num] = str(spendArr[idx-1] + 1) + " - " + str(num)
+            dictOutput[num] = add0Under10(idx) + ". " +  str(spendArr[idx-1] + 1) + " - " + str(num)
         else:
             dictOutput[num] = "0"
         
@@ -42,6 +42,8 @@ def spendRangeDictBuilder(spendArr):
     
     return dictOutput
 
+def add0Under10(idx):
+    return "0" + str(idx) if idx < 10 else str(idx)
 
 # Binary search function to return lowest num from Arr that is 
 # greater than the input num.
@@ -49,12 +51,10 @@ def spendRangeDictBuilder(spendArr):
 # I'll be using this to match the player's calculated IAP with their spending group.
 
 def binaryLowestGreater(array, iMin, iMax, num):
-    print(iMin, iMax, num)
-
     mid = int(math.floor((iMin + iMax) / 2))
 
-    print(mid, array[mid])
-    print(iMin, iMax, num)
+    # print(mid, array[mid])
+    # print(iMin, iMax, num)
 
     if iMin == iMax:
         return array[iMin]
@@ -75,12 +75,22 @@ def columnAdderAgg(data, colNameDict):
     data = roundColumn(data,colNameDict['iapRounded'])
     data = daysAgedColumn(data,colNameDict['daysAged'])
     data = sumAndCountCols(data, 
-                           data['s'],
-                           data['iapRounded'],
+                           data[sID],
+                           data[colNameDict['iapRounded']],
                            colNameDict['iapSumRunningTotal'],
                            colNameDict['iapSumTotal'],
                            colNameDict['iapCountRunningTotal'],
                            colNameDict['iapCountTotal'])
+    data = spendGroupCol(data,
+                         data[colNameDict['iapSumTotal']],
+                         spendRangeArr,
+                         spendRangeDict, 
+                         colNameDict['spendGroupTotal'])
+    data = spendGroupCol(data,
+                         data[colNameDict['iapSumRunningTotal']],
+                         spendRangeArr,
+                         spendRangeDict,
+                         colNameDict['spendGroupCurrent'])
 
     return data
 
@@ -92,6 +102,13 @@ def sDictToArr(dict, sArr):
 
     return outputArr
 
+def spendGroupCol(data, iapSumCol, spendRangeArr, spendRangeDict, colName):
+    def iapMapFunc(iap):
+        return spendRangeDict[binaryLowestGreater(spendRangeArr, 0, len(spendRangeArr) - 1, iap)]
+
+    data[colName] = map(iapMapFunc, iapSumCol)
+
+    return data 
 
 # This one is a bit sloppy.  Built on side effects (but at least all internal to the function)
 # And it changes 4 at a time.  But it seems more efficient than breaking them up just for the
@@ -116,18 +133,13 @@ def sumAndCountCols(data, sCol, iapRoundedCol, sumRunName, sumTotName, ctRunName
 
     iapSumDict = reduce(sumRedFunc,nameIAPTupList,iapSumDict)
 
-    iapSumTotalList = sDictToArr(iapSumDict, data['s'])
-    iapCtTotalList = sDictToArr(iapCtDict, data['s'])
+    iapSumTotalList = sDictToArr(iapSumDict, data[sID])
+    iapCtTotalList = sDictToArr(iapCtDict, data[sID])
 
-    iapSumRunArr = np.asarray(iapSumRunList)
-    iapSumTotArr = np.asarray(iapSumTotalList)
-    iapCtRunArr = np.asarray(iapCtRunList)
-    iapCtTotArr = np.asarray(iapCtTotalList)
-
-    data[sumRunName] = iapSumRunArr
-    data[sumTotName] = iapSumTotArr
-    data[ctRunName] = iapCtRunArr
-    data[ctTotName] = iapCtTotArr
+    data[sumRunName] = iapSumRunList
+    data[sumTotName] = iapSumTotalList
+    data[ctRunName] = iapCtRunList
+    data[ctTotName] = iapCtTotalList
 
     return data
 
@@ -182,7 +194,7 @@ colNameDict = {
     'iapCountRunningTotal': 'iapCtRun',
     'iapCountTotal': 'iapCtTotal',
     'spendGroupTotal': 'spendGroup',
-    'spendGroupDaysAged': 'sgGrAged'
+    'spendGroupDaysAged': 'sgGrAged',
     'spendGroupCurrent': 'spGrCurrent'
 }
 
@@ -191,6 +203,7 @@ server_time = 'server_time'
 install_date = 'install_date'
 server_date = 'server_date'
 iapVal = 'v'
+sID = 's'
 
 roundUp100 = roundup(100)
 
@@ -200,7 +213,7 @@ iapData = pd.read_csv('dd2-iap-query.csv')
 # don't really need to run this separately.
 iapDataClean = dataProcess(iapData)
 
-spenderRangeDict = spendRangeDictBuilder(spendRangeArr)
+spendRangeDict = spendRangeDictBuilder(spendRangeArr)
 
 iapDataNew = columnAdderAgg(iapDataClean, colNameDict)
 
@@ -211,3 +224,4 @@ iapDataNew.to_csv('dd2-iap-modified.csv', index=False)
 # next items:
 # columns for spender groups.
 # filename output - user input as argv, else default to name + timestamp. (low priority)
+
